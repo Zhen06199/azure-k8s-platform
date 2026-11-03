@@ -1,0 +1,20 @@
+replicaCount: 2
+
+image:
+  repository: ""        # 部署时用 --set 传入，比如 acrplatform71zo02.azurecr.io/api
+  tag: ""               # 部署时用 --set 传入，也就是 commit hash
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80              # Service 对集群内暴露的端口
+  targetPort: 8000      # 容器里 uvicorn 监听的端口
+
+env:
+  ENVIRONMENT: production
+
+resources:
+  requests:             # 调度时预留的资源
+    cpu: 50m
+    memory: 64Mi
+  limits:               # 运行时的上限，内存超出会被杀掉（OOMKilled）
+    memory: 128Mi

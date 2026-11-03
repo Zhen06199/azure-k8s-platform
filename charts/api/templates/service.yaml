@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  type: ClusterIP               # 只在集群内部可以访问，从外部访问用 port-forward
+  selector:
+    app: {{ .Release.Name }}    # 把流量转发给带有这个标签的 Pod
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api
+description: FastAPI demo service on AKS
+type: application
+version: 0.1.0          # chart 本身的版本
+appVersion: "1.0.0"     # 应用的版本（只用来展示，实际运行的版本由 image.tag 决定）
