@@ -1,0 +1,83 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", "charts/**", ".github/workflows/deploy.yml"]   # 只有应用、chart 或本文件改动才触发
+  workflow_dispatch:                                                 # 允许在网页上手动触发
+
+concurrency:                         # 同一分支同一时间只跑一个部署，后来的排队
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false          # 不要中途取消正在执行的 helm，否则 release 会卡在 pending
+
+permissions:
+  id-token: write                    # 允许向 GitHub 申请 OIDC token（没有这一行就登录不了 Azure）
+  contents: read                     # 允许 checkout 代码
+
+env:
+  RG: rg-aks-platform
+  AKS: aks-platform
+  NAMESPACE: app
+  RELEASE: api
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"        # 用 commit hash 的前 7 位作为镜像 tag
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Find ACR                                           # ACR 名字带随机后缀，每次重建都会变
+        run: |
+          COUNT=$(az acr list -g "$RG" --query "length(@)" -o tsv)
+          if [ "$COUNT" != "1" ]; then
+            echo "::error::Expected exactly 1 ACR in $RG, found $COUNT"; exit 1
+          fi
+          ACR=$(az acr list -g "$RG" --query '[0].loginServer' -o tsv)
+          echo "Using ACR: $ACR"
+          echo "ACR=$ACR" >> "$GITHUB_ENV"
+
+      - name: Build image
+        run: docker build -t "$ACR/api:$TAG" app/
+
+      - name: Smoke test image                                   # 推送之前先在 runner 上跑一遍，确认 /health 能访问
+        run: |
+          docker run -d --name smoke -p 8000:8000 -e APP_VERSION="$TAG" "$ACR/api:$TAG"
+          for i in $(seq 1 15); do curl -fs localhost:8000/health && break; sleep 1; done
+          curl -fs localhost:8000/ | tee /dev/stderr | grep -q "\"$TAG\""
+          [ "$(docker exec smoke id -u)" != "0" ] || { echo "::error::container runs as root"; exit 1; }
+          docker rm -f smoke
+
+      - name: Push image
+        run: |
+          az acr login -n "${ACR%%.*}"
+          docker push "$ACR/api:$TAG"
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Deploy to AKS
+        run: |
+          [ -n "$ACR" ] && [ -n "$TAG" ] || { echo "::error::ACR or TAG is empty"; exit 1; }
+          az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
+          helm upgrade --install "$RELEASE" charts/api -n "$NAMESPACE" --create-namespace \
+            --set image.repository="$ACR/api" --set image.tag="$TAG" \
+            --atomic --wait --timeout 5m
+
+      - name: Verify running version
+        run: |
+          kubectl -n "$NAMESPACE" get pods -o wide
+          RUNNING=$(kubectl -n "$NAMESPACE" exec deploy/"$RELEASE" -- \
+            python -c "import urllib.request,json;print(json.load(urllib.request.urlopen('http://localhost:8000/'))['version'])")
+          echo "Running version: $RUNNING (expected $TAG)"
+          [ "$RUNNING" = "$TAG" ]
