@@ -11,3 +11,5 @@ provider "azurerm" {
   features {}
   subscription_id = var.subscription_id
 }
+
+provider "azuread" {} # 新增：直接使用 az login 的身份，不需要额外配置
