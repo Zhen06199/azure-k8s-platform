@@ -1,0 +1,21 @@
+# AKS 的控制面由 Azure 托管，这几个组件的指标采集不到，关掉，避免出现一直 DOWN 的 target
+kubeControllerManager: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeEtcd: { enabled: false }
+kubeProxy: { enabled: false }
+
+alertmanager:
+  enabled: false   # 单节点资源有限；告警规则仍然在 Prometheus 里计算，可以在 Alerts 页面看到
+
+prometheus:
+  prometheusSpec:
+    retention: 2d    # 只保留 2 天的数据，节省磁盘
+    # 让 Prometheus 发现所有命名空间里的 ServiceMonitor 和告警规则，而不只是带 release 标签的那些
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+
+grafana:
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
