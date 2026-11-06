@@ -1,0 +1,58 @@
+- name: Configure ops VM
+  hosts: ops
+  become: true                      # 用 sudo 执行
+  vars:
+    deploy_user: deploy
+  tasks:
+    - name: Install base packages and Docker
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, ufw, docker.io]
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker is running and enabled
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create deploy user in docker group
+      ansible.builtin.user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+        shell: /bin/bash
+
+    - name: Authorize SSH key for deploy user
+      ansible.posix.authorized_key:
+        user: "{{ deploy_user }}"
+        key: "{{ lookup('file', '~/.ssh/id_ed25519.pub') }}"
+
+    - name: Harden sshd
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?{{ item.key }}\\s"
+        line: "{{ item.key }} {{ item.value }}"
+      loop:
+        - { key: PermitRootLogin, value: "no" }
+        - { key: PasswordAuthentication, value: "no" }
+      notify: Restart ssh
+
+    # 先放行 SSH，再启用防火墙，否则会把自己锁在外面
+    - name: Allow SSH through UFW
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: Enable UFW with default deny incoming
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted

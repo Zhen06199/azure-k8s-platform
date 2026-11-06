@@ -5,3 +5,4 @@
 tfplan
 crash.log
 terraform.tfvars
+ansible/inventory.ini
