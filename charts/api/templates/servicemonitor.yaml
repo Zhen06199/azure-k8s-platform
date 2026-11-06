@@ -1,0 +1,16 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}      # 必须和 Service 的 metadata.labels 一致
+  endpoints:
+    - port: http                    # 必须和 Service 端口的 name 一致
+      path: /metrics
+      interval: 15s
+{{- end }}
