@@ -5,6 +5,7 @@ resource "random_string" "suffix" {
 }
 
 resource "azurerm_resource_group" "platform" {
+  tags     = { project = "aks-platform" }
   name     = "rg-aks-platform"
   location = var.location
 }
