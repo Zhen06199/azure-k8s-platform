@@ -1,0 +1,21 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ .Release.Name }}-alerts
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  groups:
+    - name: {{ .Release.Name }}.rules
+      rules:
+        - alert: ApiHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5..", path!~"/health|/metrics"}[5m]))
+              / sum(rate(http_requests_total{path!~"/health|/metrics"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "API 5xx rate above 5% for 5 minutes"
+{{- end }}
