@@ -27,6 +27,8 @@ jobs:
       # CI 里没有 terraform.tfvars，用环境变量传入 infra 需要的变量
       TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       TF_VAR_ci_principal_id: ${{ vars.CI_PRINCIPAL_ID }}
+      TF_VAR_vm_ssh_public_key: ${{ vars.VM_SSH_PUBLIC_KEY }}
+      TF_VAR_admin_ssh_cidr: ${{ vars.ADMIN_SSH_CIDR }}
     steps:
       - uses: actions/checkout@v4
 
