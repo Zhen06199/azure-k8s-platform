@@ -1,0 +1,45 @@
+name: terraform-plan
+
+on:
+  pull_request:
+    paths: ["infra/**", ".github/workflows/terraform-plan.yml"]
+
+permissions:
+  id-token: write     # 申请 OIDC token
+  contents: read
+
+concurrency:
+  group: tf-plan-${{ github.ref }}
+  cancel-in-progress: true          # 只是 plan，有新提交时取消旧的运行即可
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      # 让 Terraform 的 azurerm provider 和 backend 都直接用 OIDC 登录（不需要 azure/login 这一步）
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      # CI 里没有 terraform.tfvars，用环境变量传入 infra 需要的变量
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_ci_principal_id: ${{ vars.CI_PRINCIPAL_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Validate
+        run: terraform validate
+
+      - name: Plan
+        run: terraform plan -input=false -no-color -lock-timeout=2m
